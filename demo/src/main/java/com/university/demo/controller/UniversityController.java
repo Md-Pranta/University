@@ -2,16 +2,31 @@ package com.university.demo.controller;
 
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.university.demo.entity.University;
 import com.university.demo.entity.UniversityType;
 import com.university.demo.service.UniversityService;
+import jdk.jfr.Timestamp;
+import org.hibernate.boot.jaxb.mapping.ManagedType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.*;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/universities")
@@ -20,30 +35,57 @@ public class UniversityController {
     @Autowired
     private UniversityService universityService;
 
-//    @GetMapping
-//    public List<University> getAllUniversities(){
-//        return universityService.getAllUniversities();
-//    }
-    @GetMapping("/{id}")
-    public University getUniversityById(@PathVariable Long id){
-        return universityService.getUniversityById(id);
+    @Autowired
+    ObjectMapper objectMapper;
+
+    //for handing the upcoming data
+    @PostMapping(value = "/add", consumes = {MediaType.MULTIPART_FORM_DATA_VALUE,MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<?> createUniversity(@RequestPart("university") String universityJson,
+                                              @RequestPart(value = "image", required = false) MultipartFile imageFile) {
+        try {
+            University university = universityService.parseUniversityJson(universityJson);
+            University createUniversity = universityService.createUniversity(university, imageFile);
+            return ResponseEntity.ok(createUniversity);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error processing Request: "+e.getMessage());
+        }
     }
 
-//    @RequestParam(value = "image", required = false) MultipartFile imageFile
-    @PostMapping("/add")
-    public University createUniversity(@RequestBody University university) {
-        return universityService.saveUniversity(university);
+    //handing update data
+    @PutMapping(value = "update/{id}",consumes = {MediaType.MULTIPART_FORM_DATA_VALUE,MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<?>updateUniversity(@PathVariable Long id,
+                                             @RequestPart("university") String universityJson,
+                                             @RequestPart(value = "image", required = false) MultipartFile imageFile){
+        try {
+            University university = universityService.parseUniversityJson(universityJson);
+            University updateUniversity = universityService.updateUniversity(id, university, imageFile);
+            return ResponseEntity.ok(updateUniversity);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error processing Request: "+e.getMessage());
+        }
     }
-    @PutMapping("/update/{id}")
-    public University updateUniversity(@PathVariable Long id, @RequestBody University university){
-        return universityService.updateUniversity(id, university);
+
+    //for list of universities
+    @GetMapping("/all")
+    public List<University> getAllUniversity(){
+        return universityService.getAllUniversities();
+    }
+
+    @GetMapping("/all/{id}")
+    public ResponseEntity<University> getUniversityById(@PathVariable Long id){
+        University university = universityService.getUniversityById(id);
+        if (university != null)return ResponseEntity.ok(university);
+        return ResponseEntity.notFound().build();
     }
     @DeleteMapping("/delete/{id}")
-    public void deleteUniversity(@PathVariable Long id){
+    public ResponseEntity<Void> deleteUniversity(@PathVariable Long id){
         universityService.deleteUniversity(id);
+        return ResponseEntity.noContent().build();
     }
 
-    @GetMapping
+
+
+    @GetMapping("/search")
     public List<University> searchUniversities(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String address,

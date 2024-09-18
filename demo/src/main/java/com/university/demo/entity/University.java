@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.Type;
+import org.hibernate.type.SqlTypes;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -36,27 +38,8 @@ public class University {
     private LocalDate startingDate;
     private LocalDateTime casuallyOpensAt;
 
-//    @Column(columnDefinition = "jsonb")
-//    private String otherInformation; // Store JSON as a string
-
-//    @Transient
-//    private JsonNode otherInformationNode;
-//
-//    @PostLoad
-//    private void postLoad() {
-//        ObjectMapper mapper = new ObjectMapper();
-//        try {
-//            this.otherInformationNode = mapper.readTree(this.otherInformation);
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-//    }
-//
-//    @PrePersist
-//    @PreUpdate
-//    private void prePersist() throws JsonProcessingException {
-//        ObjectMapper mapper = new ObjectMapper();
-//        this.otherInformation = mapper.writeValueAsString(this.otherInformationNode);
-//    }
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String , Object> otherInformation;
 
 }
