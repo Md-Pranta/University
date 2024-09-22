@@ -19,6 +19,9 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 @Transactional
@@ -32,68 +35,96 @@ public class UniversityService {
     @Value("${file.upload-dir}")
     private String imageUploadDirectory;
 
+    private final ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
+
 
     //parsing the university
-    public University parseUniversityJson(String universityJson) throws JsonProcessingException {
-        return objectMapper.readValue(universityJson, University.class);
+    public CompletableFuture<University> parseUniversityJson(String universityJson){
+        return CompletableFuture.supplyAsync(()->{
+            try {
+                return objectMapper.readValue(universityJson, University.class);
+            }catch (JsonProcessingException e){
+                throw new RuntimeException("Error parsing university Json, e");
+            }
+        }, executorService);
     }
 
     //for handle the save method of a post
     @Transactional
-    public University createUniversity(University university, MultipartFile imageFile) throws IOException {
-        if(imageFile != null && !imageFile.isEmpty()){
-            String imagePath = saveImage(imageFile);
-            university.setImage(imagePath);
-        }
-        return universityDao.save(university);
+    public CompletableFuture<University> createUniversity(University university, MultipartFile imageFile) {
+        return CompletableFuture.supplyAsync(()->{
+            try {
+                if(imageFile != null && !imageFile.isEmpty()){
+                    String imagePath = saveImage(imageFile);
+                    university.setImage(imagePath);
+                }
+                return universityDao.save(university);
+            }catch (IOException e){
+                throw  new RuntimeException("ERROR creating university ", e);
+            }
+        }, executorService);
+
     }
     //for updating the data and checking image is present then update
     @Transactional
-    public University updateUniversity(Long id, University universityDetails, MultipartFile imageFile) throws IOException {
-        University university = universityDao.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("University not found with id: "+id));
-        university.setName(universityDetails.getName());
-        university.setAddress(universityDetails.getAddress());
-        university.setUniversityType(universityDetails.getUniversityType());
-        university.setRating(universityDetails.getRating());
-        university.setDescription(universityDetails.getDescription());
-        university.setStartingDate(universityDetails.getStartingDate());
-        university.setCasuallyOpensAt(universityDetails.getCasuallyOpensAt());
-        university.setOtherInformation(universityDetails.getOtherInformation());
+    public CompletableFuture<University> updateUniversity(Long id, University universityDetails, MultipartFile imageFile) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                University university = universityDao.findById(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("University not found with id: " + id));
 
-        if (imageFile!= null && !imageFile.isEmpty()){
-            String imagePath = saveImage(imageFile);
-            university.setImage(imagePath);
-        }
-        return universityDao.save(university);
+                university.setName(universityDetails.getName());
+                university.setAddress(universityDetails.getAddress());
+                university.setUniversityType(universityDetails.getUniversityType());
+                university.setRating(universityDetails.getRating());
+                university.setDescription(universityDetails.getDescription());
+                university.setStartingDate(universityDetails.getStartingDate());
+                university.setCasuallyOpensAt(universityDetails.getCasuallyOpensAt());
+                university.setOtherInformation(universityDetails.getOtherInformation());
 
+                if (imageFile != null && !imageFile.isEmpty()) {
+                    String imagePath = saveImage(imageFile);
+                    university.setImage(imagePath);
+                }
+                return universityDao.save(university);
+            } catch (IOException e) {
+                throw new RuntimeException("Error updating university", e);
+            }
+        }, executorService);
     }
     //get all the universities as a list
-    public List<University>getAllUniversities(){
-        return universityDao.findAll();
+    public CompletableFuture<List<University>>getAllUniversities(){
+        return CompletableFuture.supplyAsync(()->universityDao.findAll(), executorService);
     }
 
     //Find university by id
-    public University getUniversityById(Long id){
-        return universityDao.findById(id).orElseThrow(()->
-                new ResourceNotFoundException("University not fount with id: "+id));
+    public CompletableFuture<University> getUniversityById(Long id){
+        return CompletableFuture.supplyAsync(()-> universityDao.findById(id)
+                .orElseThrow(()-> new ResourceNotFoundException("University not fount with id: "+id)));
+//
     }
 
     //delete university
     @Transactional
-    public void deleteUniversity(Long id){
-        University university = getUniversityById(id);
-        if (university.getImage() != null){
-            deleteImage(university.getImage());
-        }
-        universityDao.deleteById(id);
+    public CompletableFuture<Void> deleteUniversity(Long id){
+        return CompletableFuture.runAsync(()->{
+            University university = universityDao.findById(id).orElseThrow(()->new ResourceNotFoundException("University not fount with id: "+id));
+            if (university.getImage() != null){
+                deleteImage(university.getImage());
+            }
+            universityDao.deleteById(id);
+        }, executorService);
+
+
     }
 
 
     //search in university by Terms
-    public List<University> searchUniversities(String name, String address, UniversityType type, Double ratingFrom, Double ratingTo, String description, LocalDateTime openFrom, LocalDateTime openTo) {
+    public CompletableFuture<List<University>> searchUniversities(String name, String address, UniversityType type, Double ratingFrom, Double ratingTo, String description, LocalDateTime openFrom, LocalDateTime openTo) {
+        return CompletableFuture.supplyAsync(()->{
+
         if (name != null && !name.isEmpty()) {
-            return universityDao.findByNameContaining(name);
+            return universityDao.findByNameContaining(name.toLowerCase());
         } else if (address != null && !address.isEmpty()) {
             return universityDao.findByAddressContaining(address);
         } else if (type != null) {
@@ -106,6 +137,7 @@ public class UniversityService {
             return universityDao.findByCasuallyOpensAtBetween(openFrom, openTo);
         }
         return universityDao.findAll();
+        }, executorService);
     }
 
     //save the image in the file System

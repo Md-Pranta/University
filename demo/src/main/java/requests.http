@@ -1,0 +1,5 @@
+### Test search with minimal parameters
+GET http://localhost:8080/search?name=Test
+
+### Test search with no parameters
+GET http://localhost:8080/search
